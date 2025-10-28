@@ -1,0 +1,9 @@
+{
+    "name": "payment_vgtech/payment",
+    "autoload": {
+        "psr-4": {
+            "payment_vgtech\\": "src/"
+        }
+    },
+    "require": {}
+}
