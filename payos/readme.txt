@@ -1,11 +1,11 @@
 === payOS ===
 Plugin Name: payOS
-Contributors: diepmagik, locbt, hungnd, khanhnm
+Contributors: diepmagik, locbt, hungndcasso, khanhnm
 Tags: payos, vietqr, casso, woocommerce, payment
 Requires at least: 4.7
 Tested up to: 6.6
-Stable tag: 1.0.5
-Version: 1.0.5
+Stable tag: 1.0.61
+Version: 1.0.61
 Requires PHP: 7.0
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -90,6 +90,9 @@ Ensure that your WooCommerce order statuses are correctly configured and that th
 
 = 1.0.5 =
 * Added: Add new status UNDERPAID for order.
+
+= 1.0.6 =
+* Added: Add option for refresh page after payment success.
 
 == Upgrade Notice ==
 

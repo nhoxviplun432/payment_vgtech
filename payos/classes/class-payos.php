@@ -48,7 +48,7 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 	static private $PAYOS_NOT_FOUND_ORDER_CODE = 101;
 	static private $PAYOS_ORDER_EXIST = 231;
 	static private $PAYOS_WEBHOOK_ENDPOINT = "verify_payos_webhook";
-	static private $payos_default_settings = array(
+	static public $payos_default_settings = array(
 		'use_payment_gateway'         => 'yes',
 		'client_id' => '',
 		'api_key' => '',
@@ -59,14 +59,14 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			'order_status_after_failed' => 'wc-failed',
 		),
 		'transaction_prefix' => 'DH',
-		'redirect' => 'yes',
 		'link_webhook' => 'no',
 		'gateway_info' => array(
 			'name' => '',
 			'account_number' => '',
 			'account_name' => '',
 			'bank_name' => ''
-		)
+		),
+		'refresh_upon_successful_payment' => 'no'
 	);
 	static private $PAYOS_BLACK_LIST_PREFIX = array("FT", "TF", "TT", "VQR");
 	public function __construct()
@@ -209,12 +209,13 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 
 	public function payos_save_settings_and_reset_webhook()
 	{
-		if (is_array($_REQUEST['payos_gateway_settings'])) {
+		if (isset($_REQUEST['payos_gateway_settings']) && is_array($_REQUEST['payos_gateway_settings'])) {
 			// Sanitize each field
-			$client_id = sanitize_text_field($_REQUEST['payos_gateway_settings']['client_id']);
-			$api_key = sanitize_text_field($_REQUEST['payos_gateway_settings']['api_key']);
-			$checksum_key = sanitize_text_field($_REQUEST['payos_gateway_settings']['checksum_key']);
-			$transaction_prefix = sanitize_text_field($_REQUEST['payos_gateway_settings']['transaction_prefix']);
+			$client_id = isset($_REQUEST['payos_gateway_settings']['client_id']) ? sanitize_text_field($_REQUEST['payos_gateway_settings']['client_id']) : '';
+			$api_key = isset($_REQUEST['payos_gateway_settings']['api_key']) ? sanitize_text_field($_REQUEST['payos_gateway_settings']['api_key']) : '';
+			$checksum_key = isset($_REQUEST['payos_gateway_settings']['checksum_key']) ? sanitize_text_field($_REQUEST['payos_gateway_settings']['checksum_key']) : '';
+			$transaction_prefix = isset($_REQUEST['payos_gateway_settings']['transaction_prefix']) ? sanitize_text_field($_REQUEST['payos_gateway_settings']['transaction_prefix']) : '';
+			$refresh_upon_successful_payment = isset($_REQUEST['payos_gateway_settings']['refresh_upon_successful_payment']) ? $_REQUEST['payos_gateway_settings']['refresh_upon_successful_payment'] : 'no';
 
 			if (
 				$client_id != $this->payos_gateway_settings['client_id']
@@ -248,7 +249,9 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 				'checksum_key' => $checksum_key,
 				'transaction_prefix' => $transaction_prefix,
 				'order_status' => $sanitized_order_status,
-				'link_webhook' => sanitize_text_field($_REQUEST['payos_gateway_settings']['link_webhook'])
+				'order_status' => $sanitized_order_status,
+				'link_webhook' => isset($_REQUEST['payos_gateway_settings']['link_webhook']) ? sanitize_text_field($_REQUEST['payos_gateway_settings']['link_webhook']) : 'no',
+				'refresh_upon_successful_payment' => $refresh_upon_successful_payment
 			));
 		}
 	}
@@ -338,7 +341,8 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 				'value' => [],
 				'id' => [],
 				'onclick' => [],
-				'class' => []
+				'class' => [],
+				'checked' => []
 			],
 			'select' => [
 				'name' => [],
@@ -461,13 +465,14 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 
 			$payment_gateway_config .= '</select>
 				</td>
-			</tr>
-			<tr id="payos_gateway_settings_redirect" valign="top">
-				<th scope="row">' . esc_html(__('Redirect payOS:', 'payos')) . '</th>
+			</tr>';
+
+			$payment_gateway_config .= '<tr id="payos_gateway_settings_refresh" valign="top">
+				<th scope="row">' . esc_html(__('Enable refresh upon successful payment:', 'payos')) . '</th>
 				<td id="payos_gateway_settings">
-					<input name="payos_gateway_settings[redirect]" type="hidden" value="no">
-					<input name="payos_gateway_settings[redirect]" type="checkbox" value="yes" id="redirect" ' . checked($this->payos_gateway_settings['redirect'], 'yes', false) . ' />
-					<label for="payos_gateway_settings[redirect]">' . esc_html(__('On/Off', 'payos')) . '</label>
+					<input name="payos_gateway_settings[refresh_upon_successful_payment]" type="hidden" value="no">
+					<input name="payos_gateway_settings[refresh_upon_successful_payment]" type="checkbox" value="yes" id="refresh" ' . checked($this->payos_gateway_settings['refresh_upon_successful_payment'], 'yes', false) . ' />
+					<label for="payos_gateway_settings[refresh_upon_successful_payment]">' . esc_html(__('Enable', 'payos')) . '</label>
 				</td>
 			</tr>';
 
@@ -485,7 +490,8 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			'icon' =>  PAYOS_GATEWAY_URL . '/assets/img/failed.png',
 			'redirect_url' => '',
 			'checkout_url' => '',
-			'status' => isset($attributes['status']) ? $attributes['status'] : 'DEFAULT'
+			'status' => isset($attributes['status']) ? $attributes['status'] : 'DEFAULT',
+			'refresh_when_paid' => $this->payos_gateway_settings['refresh_upon_successful_payment']
 		);
 
 		// Test if there is a specific status and set the redirect url and message accordingly
@@ -499,10 +505,8 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			}
 		} elseif ($payos_data['status'] === 'PAID') {
 			$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/success.png';
-			$payos_data['message'] = __('Order has been successfully paid.', 'payos');
-			// Code custom
-			// do_action('payos_payment_paid', $attributes['order_id']);
-
+			$payos_data['message'] = __('Thanh toán của bạn đã thành công, kiểm tra lại toàn khoản nhé', 'payos');
+			$payos_data['refresh_when_paid'] = 'no';
 		} elseif ($payos_data['status'] === 'ERROR') {
 			$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/failed.png';
 			$payos_data['message'] = __('Cannot show payment link', 'payos');
@@ -514,23 +518,13 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 		if (isset($wp_styles->registered['payos-checkout-styles']) && $wp_styles->registered['payos-checkout-styles']->args !== 'all') {
 			$wp_styles->registered['payos-checkout-styles']->args = 'all';
 		}
-		// Đăng ký script
 		wp_register_script('payos-checkout-script', PAYOS_GATEWAY_URL . '/assets/js/payos-checkout.js', array('jquery'), false, true);
-
-		// Truyền dữ liệu Ajax vào JavaScript
-		wp_localize_script('payos-checkout-script', 'payos_checkout_data', array_merge($payos_data, array(
-			'ajax_url' => admin_url('admin-ajax.php'),  // URL cho xử lý Ajax
-			// 'nonce'    => wp_create_nonce('payos_checkout_nonce')  // Nonce để bảo mật (nếu cần)
-		)));
-
-		// Nạp script
+		wp_localize_script('payos-checkout-script', 'payos_checkout_data', $payos_data);
 		wp_enqueue_script('payos-checkout-script');
-
 
 		// Output the shortcode content
 		return '<div id="payos-checkout-container"></div>';
 	}
-
 
 	public function use_payment_gateway_template(string $status = null, string $checkout_url = null, $order = null)
 	{
@@ -786,14 +780,14 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 		$logger = wc_get_logger();
 		$txtBody = file_get_contents('php://input');
 		$body = json_decode(str_replace('\\', '\\\\', $txtBody), true);
+		$is_test_webhook = $body['desc'] == 'Giao dich thu nghiem' || $body['data']['description'] == 'VQRIO123' || $body['data']['reference'] == 'MA_GIAO_DICH_THU_NGHIEM';
 		try {
-			if ($body['desc'] == 'Giao dich thu nghiem' || $body['data']['description'] == 'VQRIO123' || $body['data']['reference'] == 'MA_GIAO_DICH_THU_NGHIEM') {
-				echo esc_html__('Webhook delivered successfully', 'payos');
-				die();
-			}
-
 			if ($body['code'] !== self::$PAYOS_SUCCESS) {
 				throw new Exception(strval($body['desc']), intval($body['code']));
+			}
+			if ($is_test_webhook) {
+				echo esc_html__('Webhook delivered successfully', 'payos');
+				die();
 			}
 			$transaction = $body['data'];
 			$order_code = $transaction['orderCode'];
@@ -806,8 +800,10 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			// --------------Xac thuc du lieu webhook-------------------
 			$signature = $this->create_signature($transaction);
 			if (!$body['signature'] || $signature !== $body['signature']) {
-				$order->update_status($payos_gateway_settings['order_status']['order_status_after_failed']);
-				$order->add_order_note(__('Order has been cancelled', 'payos'));
+				if (!$is_test_webhook) {
+					$order->update_status($payos_gateway_settings['order_status']['order_status_after_failed']);
+					$order->add_order_note(__('Order has been cancelled', 'payos'));
+				}
 				throw new Exception(__('Data not integrity', 'payos'));
 			}
 			// ---------------------------------------------------------
@@ -830,7 +826,6 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 					if ($rest_amount < 0) {
 						$order->add_order_note(__('Order has been overpaid', 'payos'));
 					}
-					
 					break;
 
 				case $rest_amount > 0:
@@ -861,6 +856,7 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 		} catch (Exception $e) {
 			$logger->error(wc_print_r($body, true), array('error' => $e->getMessage(), 'source' => 'payos-webhook'));
 			$response = array('code' => $e->getCode(), 'message' => $e->getMessage());
+			http_response_code(500);
 			echo wp_json_encode($response);
 			die();
 		}
@@ -907,7 +903,7 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			return $body;
 		}
 
-		$logger->warning(__('Webhook creation response did not meet success criteria.', 'payos'), array('source' => 'payos-webhook'));
+		$logger->warning(__('Webhook creation response did not meet success criteria.', 'payos'), array('source' => 'payos-webhook', 'error' => $response));
 		return null;
 	}
 

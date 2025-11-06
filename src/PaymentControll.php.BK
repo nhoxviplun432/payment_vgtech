@@ -1,0 +1,285 @@
+<?php
+namespace paymentvgtech;
+
+defined('ABSPATH') || exit;
+
+class PaymentControll{
+
+    /*----------------------------------------
+     * FRONT: Inject CSS nếu có sản phẩm tra cứu
+     -----------------------------------------*/
+    public function inject_checkout_css()
+    {
+        global $product_type;
+        $cart = WC()->cart ? WC()->cart->get_cart() : [];
+        $has_special = false;
+
+        foreach ($cart as $cart_item) {
+            $product = $cart_item['data'];
+            $type = get_post_meta($product->get_id(), '_product_type', true);
+            if (in_array($type, [$product_type, 'phone_sale'])) {
+                $has_special = true;
+                break;
+            }
+        }
+
+        if ($has_special) {
+            wp_enqueue_style('checkout-css', PAYMENT_AI_CHAT_VGTECH_URL . 'assets/checkout.css');
+        }
+    }
+
+    /*----------------------------------------
+     * AJAX: Gọi API PDF Full và gửi mail
+     -----------------------------------------*/
+    public function handle_get_full_pdf_api()
+    {
+        if (!isset($_POST['_ajax_nonce']) || !wp_verify_nonce($_POST['_ajax_nonce'], 'secure_nonce_action')) {
+            wp_send_json_error('Yêu cầu không hợp lệ.');
+        }
+
+        global $product_type, $url_api_download_pdf_tsh, $product_tracuu_tsh, $version_tsh_pro;
+
+        $order_id = intval($_POST['order_id'] ?? 0);
+        if (!$order_id) {
+            wp_send_json_error(['error' => 'Không nhận được order ID']);
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wp_send_json_error(['error' => 'Không tìm thấy đơn hàng']);
+        }
+
+        $status = $order->get_status();
+        if (!in_array($status, ['on-hold', 'processing', 'completed'])) {
+            wp_send_json_error(['error' => 'Đơn hàng chưa thanh toán hoặc không hợp lệ']);
+        }
+
+        $data_info = $order->get_meta('_tracuu_data_info');
+        if (empty($data_info)) {
+            wp_send_json_error(['error' => 'Không tìm thấy dữ liệu người dùng trong đơn hàng']);
+        }
+
+        // Xác định đúng loại sản phẩm
+        $has_tracuu = false;
+        foreach ($order->get_items() as $item) {
+            $type = get_post_meta($item->get_product_id(), '_product_type', true);
+            if ($type === $product_type) {
+                $has_tracuu = true;
+                break;
+            }
+        }
+
+        if (!$has_tracuu) {
+            wp_send_json_error(['error' => 'Đơn hàng không chứa sản phẩm tra cứu']);
+        }
+
+        // Gửi request API
+        $url = '';
+        $data_submit = [];
+
+        if (($data_info['type'] ?? '') === $product_tracuu_tsh) {
+            $data_submit = [
+                'day'       => $data_info['day'],
+                'month'     => $data_info['month'],
+                'year'      => $data_info['year'],
+                'full_name' => $data_info['full_name'],
+                'report_key' => $version_tsh_pro,
+            ];
+            $url = $url_api_download_pdf_tsh;
+        }
+
+        $affiliate_code = function_exists('get_affiliate_code') ? get_affiliate_code() : '';
+        $query = http_build_query($data_submit);
+        $request_url = $url . '?' . $query . ($affiliate_code ? "&aff_code=$affiliate_code" : '');
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $request_url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $data_submit
+        ]);
+        $result = curl_exec($ch);
+        if (curl_errno($ch)) {
+            curl_close($ch);
+            wp_send_json_error(['error' => 'Không thể kết nối API']);
+        }
+        curl_close($ch);
+
+        $response = json_decode($result, true);
+        if (empty($response['status']) || !$response['status'] || empty($response['data'])) {
+            wp_send_json_error(['error' => 'API phản hồi không hợp lệ']);
+        }
+
+        $pdf_url = $response['data'];
+        $to = $order->get_billing_email() ?: $data_info['email'];
+        if (empty($to)) {
+            wp_send_json_error(['error' => 'Không tìm thấy email người nhận', 'data' => $pdf_url]);
+        }
+
+        $subject = 'Tài liệu tra cứu PDF đầy đủ';
+        $message = "Gửi bạn {$data_info['full_name']}<br>";
+        $message .= "Link tải file báo cáo Pdf Full nội dung: <a href='{$pdf_url}'>Tải File</a><br><br>";
+        $message .= "Trân trọng cảm ơn bạn đã sử dụng dịch vụ.<br>";
+        $message .= "Hotline: 0868391588 (Zalo)<br>Mail: " . get_option('admin_email') . "<br>Website: " . home_url();
+
+        $headers = ['Content-Type: text/html; charset=UTF-8'];
+        $sent = wp_mail($to, $subject, $message, $headers);
+
+        if ($sent) {
+            wp_send_json_success(['success' => true, 'data' => $pdf_url]);
+        } else {
+            wp_send_json_error(['error' => 'Không gửi được email', 'data' => $pdf_url]);
+        }
+    }
+
+    /*----------------------------------------
+     * AJAX: Check thanh toán hoàn tất
+     -----------------------------------------*/
+    public function handle_checkPaymentPaid()
+    {
+        global $product_type, $product_tracuu_tsh;
+
+        $order_id = intval($_POST['order_id'] ?? 0);
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            wp_send_json_error(['error' => 'Không tìm thấy đơn hàng']);
+        }
+
+        $data_info = $order->get_meta('_tracuu_data_info');
+        $check_email_sent = $order->get_meta('_email_send');
+        $status = $order->get_status();
+
+        if (!in_array($status, ['on-hold', 'processing', 'completed'])) {
+            wp_send_json_error(['error' => 'Đơn hàng chưa thanh toán']);
+        }
+
+        // Nếu là phone_sale
+        if (($data_info['type'] ?? '') === 'phone_sale') {
+            if (!$check_email_sent) {
+                $to = $order->get_billing_email() ?: $data_info['email'];
+                $full_name = get_post_meta($order_id, '_billing_full_name', true) ?: $data_info['full_name'];
+                $items = $order->get_items();
+                $last = end($items);
+                $product_name = $last ? $last->get_name() : '';
+
+                $subject = 'Xác nhận thanh toán số điện thoại năng lượng';
+                $msg = "Xin chào {$full_name},<br>Bạn đã thanh toán thành công số điện thoại <strong>{$product_name}</strong>.<br>";
+                $msg .= "Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi.<br>";
+                $msg .= "Liên hệ: 0963 113 868";
+
+                if (wp_mail($to, $subject, $msg, ['Content-Type: text/html; charset=UTF-8'])) {
+                    update_post_meta($order_id, '_email_send', 1);
+                    wp_send_json_success(['success' => true, 'type_paid' => 'phone_sale']);
+                }
+                wp_send_json_error(['error' => 'Không thể gửi email']);
+            }
+            wp_send_json_success(['success' => true, 'type_paid' => 'phone_sale']);
+        }
+
+        // Nếu là tra cứu TSH
+        if (($data_info['type'] ?? '') === $product_tracuu_tsh) {
+            wp_send_json_success([
+                'success' => '<div id="text-tracuu-order-completed">
+                    Vui lòng nhấp vào nút bên dưới để tải file Pdf full nội dung. <br>
+                    Thời gian tạo file có thể từ 10–15 giây, vui lòng chờ và không thoát trang.
+                </div>
+                <div style="margin-top: 20px;">
+                    <button class="elementor-button" id="download-pdf-full">
+                        Download PDF <i class="fas fa-download"></i>
+                    </button>
+                </div>',
+                'type_paid' => $product_type
+            ]);
+        }
+    }
+
+    /*----------------------------------------
+     * UTILITIES
+     -----------------------------------------*/
+    public static function tinhConSoChuDao($dob)
+    {
+        $digits = preg_replace('/[^0-9]/', '', $dob);
+        $sum = array_sum(str_split($digits));
+        if (in_array($sum, [11, 22])) return $sum;
+        while ($sum > 9) {
+            $sum = array_sum(str_split($sum));
+        }
+        return $sum;
+    }
+
+    public static function xacDinhCungHoangDao($dob)
+    {
+        $parts = explode('/', $dob);
+        if (count($parts) !== 3) return 'Định dạng không hợp lệ';
+        [$d, $m] = [$parts[0], $parts[1]];
+        $signs = [
+            ['Bạch Dương', [21, 3], [19, 4]],
+            ['Kim Ngưu', [20, 4], [20, 5]],
+            ['Song Tử', [21, 5], [20, 6]],
+            ['Cự Giải', [21, 6], [22, 7]],
+            ['Sư Tử', [23, 7], [22, 8]],
+            ['Xử Nữ', [23, 8], [22, 9]],
+            ['Thiên Bình', [23, 9], [22, 10]],
+            ['Bọ Cạp', [23, 10], [21, 11]],
+            ['Nhân Mã', [22, 11], [21, 12]],
+            ['Ma Kết', [22, 12], [19, 1]],
+            ['Bảo Bình', [20, 1], [18, 2]],
+            ['Song Ngư', [19, 2], [20, 3]],
+        ];
+        foreach ($signs as [$name, $start, $end]) {
+            if (($m == $start[1] && $d >= $start[0]) || ($m == $end[1] && $d <= $end[0])) {
+                return $name;
+            }
+        }
+        return 'Không xác định';
+    }
+
+    public static function insertTraCuuData($title, $value, $type, $order_id, $tracuu, $url)
+    {
+        global $wpdb;
+        return $wpdb->insert(
+            "{$wpdb->prefix}tracuu",
+            [
+                'title'   => $title,
+                'value'   => $value,
+                'date'    => current_time('mysql'),
+                'type'    => $type,
+                'id_order'=> $order_id,
+                'tracuu'  => $tracuu,
+                'url'     => $url,
+                'user_id' => get_current_user_id() ?: null,
+            ]
+        ) !== false;
+    }
+
+    /*----------------------------------------
+     * ADMIN: thêm cột Email PDF
+     -----------------------------------------*/
+    public function add_order_email_column($cols)
+    {
+        $new = [];
+        foreach ($cols as $key => $label) {
+            $new[$key] = $label;
+            if ($key === 'order_number') {
+                $new['customer_email'] = 'Email Nhận PDF';
+            }
+        }
+        return $new;
+    }
+
+    public function render_order_email_column($col, $post_id)
+    {
+        if ($col === 'customer_email') {
+            $order = wc_get_order($post_id);
+            echo esc_html($order->get_billing_email());
+        }
+    }
+
+    public function make_order_email_sortable($cols)
+    {
+        $cols['customer_email'] = 'billing_email';
+        return $cols;
+    }
+}

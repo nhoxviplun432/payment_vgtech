@@ -1,8 +1,22 @@
 <?php
 
+/**
+ * Plugin Name: payOS
+ * Plugin URI: https://payos.vn/docs/tich-hop-webhook/woocommerce/
+ * Description:  Quick bank transfer by generating QR codes that are accepted by 37 Vietnam banking App: Vietcombank, Vietinbank, BIDV, ACB, VPBank, MBank, TPBank, Digimi, MSB ... Developed for WooCommerce.
+ * Author: payOS Team
+ * Author URI: https://payos.vn
+ * Text Domain: payos
+ * Requires Plugins: woocommerce
+ * Domain Path: /languages
+ * Version: 1.0.61
+ * Tested up to: 6.6
+ * License: GNU General Public License v3.0
+ */
+
 
 defined('ABSPATH') or exit;
-define('PAYOS_GATEWAY_VERSION', '1.0.5');
+define('PAYOS_GATEWAY_VERSION', '1.0.61');
 define('PAYOS_GATEWAY_URL', untrailingslashit(plugins_url(basename(plugin_dir_path(__FILE__)), basename(__FILE__))));
 define('PAYOS_GATEWAY_PATH', untrailingslashit(plugin_dir_path(__FILE__)));
 
@@ -58,6 +72,7 @@ function payos_add_setting()
             'exclude_from_search' => false,
             'label_count' => _n_noop(__('Underpaid', 'payos') . ' (%s)', __('Underpaid', 'payos') . ' (%s)', 'payos')
         ));
+        update_setting_options();
     }
 }
 function payos_add_settings_link($links)
@@ -84,3 +99,14 @@ function add_underpaid_to_order_statuses($order_statuses)
     }
     return $new_order_statuses;
 }
+
+    function update_setting_options()
+    {
+        $old_setting_options = get_option('payos_gateway_settings', WC_payOS_Payment_Gateway::$payos_default_settings);
+
+        if (!array_key_exists('refresh_upon_successful_payment', $old_setting_options)) {
+            $new_setting_options = array('refresh_upon_successful_payment' => 'no');
+            $updated_setting_options = array_merge($old_setting_options, $new_setting_options);
+            update_option('payos_gateway_settings', $updated_setting_options);
+        }
+    }
