@@ -223,57 +223,72 @@ class AccountControll{
     public function register_tracuu_endpoints()
     {
         add_rewrite_endpoint('tuvan', EP_ROOT | EP_PAGES);
-        add_rewrite_endpoint('tuvan-view', EP_ROOT | EP_PAGES);
+        // add_rewrite_endpoint('tuvan-view', EP_ROOT | EP_PAGES);
     }
 
-    public function account_tuvan_endpoint(){
-        $user_id = get_current_user_id();
+    public function account_tuvan_endpoint() {
         global $wpdb;
-        $table = $wpdb->prefix . 'vgtech_payment_ai';
 
-        $results = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table WHERE user_id = %d ORDER BY date DESC",
-            $user_id
-        ));
-
-        if (!$results) {
-            echo '<p>Chưa có dữ liệu </p>';
+        $user_id = get_current_user_id();
+        if (!$user_id) {
+            echo '<p>Bạn cần đăng nhập để xem dữ liệu.</p>';
             return;
         }
 
-        echo '<table style="width:100%; border-collapse:collapse;">';
+        $table = $wpdb->prefix . 'vgtech_payment_ai';
+
+        // Lấy dữ liệu theo user
+        $results = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE user_id = %d ORDER BY created_at DESC",
+            $user_id
+        ));
+
+        if (empty($results)) {
+            echo '<p>Chưa có dữ liệu thanh toán nào.</p>';
+            return;
+        }
+
+        // Hiển thị bảng
+        echo '<table style="width:100%; border-collapse:collapse; border:1px solid #ccc;">';
+        echo '<thead>
+                <tr style="background-color:#f5f5f5;">
+                    <th style="padding:10px; text-align:left;">#</th>
+                    <th style="padding:10px; text-align:left;">Mã đơn hàng</th>
+                    <th style="padding:10px; text-align:left;">Số lượt cộng</th>
+                    <th style="padding:10px; text-align:left;">Ngày tạo</th>
+                    <th style="padding:10px; text-align:center;">Hành động</th>
+                </tr>
+            </thead>';
+        echo '<tbody>';
 
         $index = 1;
         foreach ($results as $row) {
-            $bg_color = $index % 2 === 0 ? '#ededed' : '#ffffff';
-
-            $type = false;
-            if($row->type == 'full'){
-                $type = true;
-            }
+            $bg_color = $index % 2 === 0 ? '#fafafa' : '#ffffff';
+            $order_id = intval($row->order_id);
 
             echo '<tr style="background-color:' . $bg_color . ';">';
-                echo '<td style="padding: 10px; width:5%;">' . $index . '</td>';
-                echo '<td style="padding: 10px; width:35%;">' . esc_html($row->title) . '</td>';
-                echo '<td style="padding: 10px; width:20%;">' . date('d/m/Y H:i', strtotime($row->date)) . '</td>';
-                echo '<td style="padding: 10px; width:20%;">' . esc_html($type ? 'Bản Đầy Đủ' : 'Bản Tra Cứu') . '</td>';
-                echo '<td class="action table-tracuu-action" style="padding: 10px; width:20%;">';
-                
-                if ($type && $row->id_order) {
-                    $detail_url = wc_get_account_endpoint_url('tuvan-view') . $row->id_order;
-                    echo '<a href="' . esc_url($detail_url) . '" title="Xem chi tiết"><i class="fas fa-info-circle"></i></a>';
-                    echo '<a href="#" title="Tải về"><i class="fas fa-download"></i></a>';
-                }
-                echo '<a href="#" title="Xem lại"><i class="fas fa-circle-notch"></i></a>';
-                echo '<a href="#" title="Xóa"><i class="fas fa-trash"></i></a>';
-                echo '</td>';
+            echo '<td style="padding:10px;">' . $index . '</td>';
+            echo '<td style="padding:10px;">#' . esc_html($order_id) . '</td>';
+            echo '<td style="padding:10px;">' . esc_html($row->value) . '</td>';
+            echo '<td style="padding:10px;">' . date('d/m/Y H:i', strtotime($row->created_at)) . '</td>';
+            echo '<td style="padding:10px; text-align:center;">';
+
+            // Nếu có order → liên kết xem đơn hàng WooCommerce
+            if ($order_id) {
+                $order_url = wc_get_account_endpoint_url('view-order/' . $order_id);
+                echo '<a href="' . esc_url($order_url) . '" title="Xem đơn hàng"><i class="fas fa-eye"></i></a> ';
+            }
+
+            echo '</td>';
             echo '</tr>';
-            
-            $index++; 
+
+            $index++;
         }
 
+        echo '</tbody>';
         echo '</table>';
     }
+
 
     public function render_tracuu_history()
     {

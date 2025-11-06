@@ -252,7 +252,7 @@ class CheckoutControll{
     }
 
     public function vgtech_payment_complete_payos($order_id){
-            $order = wc_get_order($order_id);
+        $order = wc_get_order($order_id);
         if (!$order) return;
 
         // Tránh cộng lặp nếu webhook retry
@@ -271,58 +271,96 @@ class CheckoutControll{
 
     public function get_payment_status($order_id, $status)
     {
-        global $product_type, $product_package;
+        global $wpdb, $product_type, $product_package;
 
-        if($status == 'PENDING' || $status == 'ERROR'){
+        $table_name = $wpdb->prefix . 'vgtech_payment_ai';
+
+        // 1️⃣ Nếu chưa thanh toán thì bỏ qua
+        if ($status === 'PENDING' || $status === 'ERROR') {
             return ['status' => 'order_not_paid'];
-        }else{
-            // Kiểm tra đầu vào
-            if (empty($order_id) || !is_numeric($order_id)) {
-                error_log('⚠️ get_payment_status: order_id không hợp lệ');
-                return ['status' => 'invalid_order'];
+        }
+
+        // 2️⃣ Kiểm tra đầu vào
+        if (empty($order_id) || !is_numeric($order_id)) {
+            error_log('⚠️ get_payment_status: order_id không hợp lệ ' . $order_id);
+            return ['status' => 'invalid_order'];
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            error_log("⚠️ get_payment_status: Không tìm thấy order #{$order_id}");
+            return ['status' => 'order_not_found'];
+        }
+
+        // 3️⃣ Kiểm tra flag không cộng trùng
+        if (!empty($order->get_meta('_vgtech_ai_views_incremented'))) {
+            return ['status' => 'already_incremented'];
+        }
+
+        // 4️⃣ Lặp qua từng sản phẩm trong order
+        $total_added = 0;
+        $items = $order->get_items();
+
+        foreach ($items as $item) {
+            $product_id = $item->get_product_id();
+            if (!$product_id) continue;
+
+            // Lấy loại sản phẩm
+            $current_type = get_post_meta($product_id, '_product_type', true);
+            if (empty($current_type)) {
+                $product_obj = wc_get_product($product_id);
+                $current_type = $product_obj ? $product_obj->get_type() : '';
             }
 
-            $order = wc_get_order($order_id);
-            if (!$order) {
-                error_log("⚠️ get_payment_status: Không tìm thấy order #{$order_id}");
-                return ['status' => 'order_not_found'];
-            }
+            // Kiểm tra loại sản phẩm
+            if ($current_type === $product_type) {
+                $user_id = $order->get_user_id();
+                if (!$user_id) continue;
 
-            // Kiểm tra xem order đã có meta increment chưa
-            $already_incremented = $order->get_meta('_vgtech_ai_views_incremented');
-            if (!empty($already_incremented)) {
-                // Đã xử lý rồi
-                return 2;
-            }
+                // Lấy số lượt cộng từ meta package
+                $package_meta_key = '_' . $product_package;
+                $add_views = (int) get_post_meta($product_id, $package_meta_key, true);
+                if ($add_views <= 0) $add_views = 1; // fallback mặc định
 
-            // Lặp qua từng sản phẩm trong order
-            $items = $order->get_items();
-            foreach ($items as $item) {
-                $product_id = $item->get_product_id();
-                $product = wc_get_product($product_id);
+                // Cộng vào usermeta
+                $current_views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
+                $new_views = $current_views + $add_views;
+                update_user_meta($user_id, '_vgtech_ai_views', $new_views);
 
-                if (!$product) continue;
+                // Ghi log vào database
+                $wpdb->insert(
+                    $table_name,
+                    [
+                        'user_id'  => $user_id,
+                        'order_id' => $order_id,
+                        'value'    => $add_views,
+                        'created_at' => current_time('mysql'),
+                    ],
+                    ['%d', '%d', '%d', '%s']
+                );
 
-                // Kiểm tra loại sản phẩm có khớp với global $product_type không
-                if ($product->get_type() === $product_type) {
-                    // Tăng lượt xem AI cho user
-                    $user_id = $order->get_user_id();
-                    if ($user_id) {
-                        $views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
-                        update_user_meta($user_id, '_vgtech_ai_views', $views + 1);
-
-                        // Gắn flag để không tăng lại lần nữa
-                        $order->update_meta_data('_vgtech_ai_views_incremented', 'yes');
-                        $order->save();
-
-                        error_log("✅ Đã cộng lượt xem cho user {$user_id} từ order #{$order_id}");
-                        return ['status' => 'success', 'user_id' => $user_id, 'views' => $views + 1];
-                    }
-                }
+                $total_added += $add_views;
+                error_log("✅ Cộng {$add_views} lượt xem cho user {$user_id} từ sản phẩm #{$product_id} (order #{$order_id})");
             }
         }
 
-        // Nếu không có sản phẩm nào khớp
+        // 5️⃣ Cập nhật flag nếu có cộng
+        if ($total_added > 0) {
+            $order->update_meta_data('_vgtech_ai_views_incremented', 'yes');
+            $order->save();
+
+            error_log("🎯 Tổng cộng +{$total_added} lượt xem từ order #{$order_id}");
+            return [
+                'status' => 'success',
+                'total_added' => $total_added,
+                'order_id' => $order_id
+            ];
+        }
+
+        // 6️⃣ Không có sản phẩm khớp
         return ['status' => 'no_matching_product'];
     }
+
+
+
 }

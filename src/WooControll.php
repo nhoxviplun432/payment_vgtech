@@ -47,24 +47,87 @@ class WooControll {
     /**
      * Lưu dữ liệu meta sản phẩm
      */
-    public function save_product_meta($post_id) {
+    public function get_payment_status($order_id, $status)
+    {
         global $product_type, $product_package;
 
-        $type = isset($_POST['_product_type']) ? sanitize_text_field($_POST['_product_type']) : '';
-
-        if ($type === 'product') {
-            update_post_meta($post_id, '_product_type', 'product');
-            delete_post_meta($post_id, '_'.$product_package);
-            return;
+        // 1. Nếu chưa thanh toán, không làm gì
+        if ($status === 'PENDING' || $status === 'ERROR') {
+            return ['status' => 'order_not_paid'];
         }
 
-        if ($type === $product_type) {
-            update_post_meta($post_id, '_product_type', $product_type);
-
-            $ai_chat_value = isset($_POST['_'.$product_package]) ? intval($_POST['_'.$product_package]) : 0;
-            update_post_meta($post_id, '_'.$product_package, $ai_chat_value);
+        // 2. Kiểm tra đầu vào hợp lệ
+        if (empty($order_id) || !is_numeric($order_id)) {
+            error_log('⚠️ get_payment_status: order_id không hợp lệ ' . $order_id);
+            return ['status' => 'invalid_order'];
         }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            error_log("⚠️ get_payment_status: Không tìm thấy order #{$order_id}");
+            return ['status' => 'order_not_found'];
+        }
+
+        // 3. Kiểm tra flag tránh cộng trùng
+        $already_incremented = $order->get_meta('_vgtech_ai_views_incremented');
+        if (!empty($already_incremented)) {
+            return ['status' => 'already_incremented'];
+        }
+
+        // 4. Lặp qua từng sản phẩm
+        $total_added = 0;
+        $items = $order->get_items();
+
+        foreach ($items as $item) {
+            $product_id = $item->get_product_id();
+            if (!$product_id) continue;
+
+            // Lấy loại sản phẩm
+            $current_type = get_post_meta($product_id, '_product_type', true);
+            if (empty($current_type)) {
+                $product_obj = wc_get_product($product_id);
+                $current_type = $product_obj ? $product_obj->get_type() : '';
+            }
+
+            // Kiểm tra loại sản phẩm có khớp không
+            if ($current_type === $product_type) {
+                $user_id = $order->get_user_id();
+                if (!$user_id) continue;
+
+                // Lấy giá trị meta theo package (vd: _ai_package = 5)
+                $product_package_meta_key = '_' . $product_package;
+                $add_views = (int) get_post_meta($product_id, $product_package_meta_key, true);
+
+                if ($add_views <= 0) $add_views = 1; // fallback mặc định 1 nếu chưa set meta
+
+                // Cộng vào lượt xem
+                $current_views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
+                $new_views = $current_views + $add_views;
+
+                update_user_meta($user_id, '_vgtech_ai_views', $new_views);
+                $total_added += $add_views;
+
+                error_log("✅ Cộng {$add_views} lượt xem cho user {$user_id} từ sản phẩm #{$product_id} (order #{$order_id})");
+            }
+        }
+
+        // 5. Nếu đã cộng ít nhất 1 lần → lưu flag
+        if ($total_added > 0) {
+            $order->update_meta_data('_vgtech_ai_views_incremented', 'yes');
+            $order->save();
+
+            error_log("🎯 Tổng cộng +{$total_added} lượt xem từ order #{$order_id}");
+            return [
+                'status' => 'success',
+                'total_added' => $total_added,
+                'order_id' => $order_id
+            ];
+        }
+
+        // 6. Không có sản phẩm nào khớp
+        return ['status' => 'no_matching_product'];
     }
+
 
     /**
      * JS hiển thị/ẩn trường AI Chat trong admin

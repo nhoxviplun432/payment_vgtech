@@ -483,14 +483,19 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 
 	public function payos_checkout_shortcode($attributes)
 	{
-
-		// Gọi controller tùy chỉnh
 		$vgtech_payment_data = null;
-		if (class_exists('\paymentvgtech\CheckoutControll')) {
+		$status = isset($attributes['status']) ? $attributes['status'] : 'DEFAULT';
+
+		// === Chỉ gọi controller khi trạng thái là PAID ===
+		if ($status === 'PAID' && class_exists('\paymentvgtech\CheckoutControll')) {
 			try {
 				$checkout_controller = new \paymentvgtech\CheckoutControll();
-				if (method_exists($checkout_controller, 'get_payment_status')) {
-					$vgtech_payment_data = $checkout_controller->get_payment_status($attributes['order_id'], $attributes['status']);
+
+				if (method_exists($checkout_controller, 'get_payment_status') && isset($attributes['order_id'])) {
+					$vgtech_payment_data = $checkout_controller->get_payment_status(
+						$attributes['order_id'],
+						$status
+					);
 				}
 			} catch (\Throwable $e) {
 				error_log('❌ VGTech Payment: ' . $e->getMessage());
@@ -498,53 +503,74 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 		} else {
 			error_log('⚠️ Class paymentvgtech\CheckoutControll not found.');
 		}
-		// Define your data
+
+		// === Chuẩn bị dữ liệu cho JS ===
 		$payos_data = array(
 			'message' => __('Please wait...', 'payos'),
 			'error_message' => __('Cannot show payment link', 'payos'),
-			'icon' =>  PAYOS_GATEWAY_URL . '/assets/img/failed.png',
+			'icon' => PAYOS_GATEWAY_URL . '/assets/img/failed.png',
 			'redirect_url' => '',
 			'checkout_url' => '',
-			'status' => isset($attributes['status']) ? $attributes['status'] : 'DEFAULT',
+			'status' => $status,
 			'refresh_when_paid' => $this->payos_gateway_settings['refresh_upon_successful_payment'],
-			'vgtech_payment' => $vgtech_payment_data,
+			'vgtech_payment' => '',
 		);
 
-		// Test if there is a specific status and set the redirect url and message accordingly
-		if ($payos_data['status'] === 'PENDING' && isset($attributes['order_id'])) {
+		// === Gán dữ liệu theo trạng thái ===
+		if ($status === 'PENDING' && isset($attributes['order_id'])) {
 			$order = wc_get_order($attributes['order_id']);
 			if ($order) {
 				$payos_data['redirect_url'] = $order->get_checkout_order_received_url();
-				$payos_data['checkout_url'] =  isset($attributes['checkout_url']) ? $attributes['checkout_url'] : '';
-				$payos_data['icon'] =  PAYOS_GATEWAY_URL . '/assets/img/success.png';
-				$payos_data['message'] = __('Order has been successfully paid.', 'payos');
+				$payos_data['checkout_url'] = isset($attributes['checkout_url']) ? $attributes['checkout_url'] : '';
+				$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/pending.png';
+				$payos_data['message'] = __('Vui lòng hoàn tất thanh toán qua PayOS để tiếp tục.', 'payos');
 			}
-		} elseif ($payos_data['status'] === 'PAID') {
+		} elseif ($status === 'PAID') {
 			$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/success.png';
-			$payos_data['message'] = __('Thanh toán của bạn đã thành công, kiểm tra lại toàn khoản nhé', 'payos');
+			$payos_data['message'] = __('Thanh toán của bạn đã thành công. Cảm ơn bạn!', 'payos');
 			$payos_data['refresh_when_paid'] = 'no';
-		} elseif ($payos_data['status'] === 'ERROR') {
+			$payos_data['vgtech_payment'] = $vgtech_payment_data;
+		} elseif ($status === 'ERROR') {
 			$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/failed.png';
-			$payos_data['message'] = __('Cannot show payment link', 'payos');
+			$payos_data['message'] = __('Có lỗi xảy ra khi hiển thị liên kết thanh toán.', 'payos');
 		}
 
-		// Register and enqueue the script
-		wp_enqueue_style('payos-checkout-styles', PAYOS_GATEWAY_URL . '/assets/css/payos-checkout.css', array(), false, 'all');
+		// === Gắn CSS + JS ===
+		wp_enqueue_style(
+			'payos-checkout-styles',
+			PAYOS_GATEWAY_URL . '/assets/css/payos-checkout.css',
+			array(),
+			false,
+			'all'
+		);
+
 		global $wp_styles;
-		if (isset($wp_styles->registered['payos-checkout-styles']) && $wp_styles->registered['payos-checkout-styles']->args !== 'all') {
+		if (isset($wp_styles->registered['payos-checkout-styles']) &&
+			$wp_styles->registered['payos-checkout-styles']->args !== 'all') {
 			$wp_styles->registered['payos-checkout-styles']->args = 'all';
 		}
-		wp_register_script('payos-checkout-script', PAYOS_GATEWAY_URL . '/assets/js/payos-checkout.js', array('jquery'), false, true);
+
+		wp_register_script(
+			'payos-checkout-script',
+			PAYOS_GATEWAY_URL . '/assets/js/payos-checkout.js',
+			array('jquery'),
+			false,
+			true
+		);
 		wp_localize_script('payos-checkout-script', 'payos_checkout_data', $payos_data);
 		wp_enqueue_script('payos-checkout-script');
 
-		// Output the shortcode content
+		// === Xuất nội dung shortcode ===
 		return '<div id="payos-checkout-container"></div>';
 	}
 
-	public function use_payment_gateway_template(string $status = null, string $checkout_url = null, $order = null)
+
+	public function use_payment_gateway_template(int $order_id = null, string $status = null, string $checkout_url = null, $order = null)
 	{
-		$order_id = $order ? $order->get_id() : null;
+	    if($order_id == null){
+	        $order_id = $order ? $order->get_id() : null;
+	    }
+	
 		echo do_shortcode('[payos_checkout status="' . $status . '" order_id="' . $order_id . '" checkout_url="' . $checkout_url . '"]');
 	}
 
@@ -553,43 +579,39 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 	 *
 	 * @param int $order_id Order ID.
 	 */
-	public function payos_thankyou_page($order_id)
-	{
-		// loading ui
-		$this->use_payment_gateway_template();
+	public function payos_thankyou_page($order_id) {
+
+		$this->use_payment_gateway_template($order_id); // rõ nghĩa hơn
+
 		$logger = wc_get_logger();
 		try {
-			$order = wc_get_order($order_id);
+			$order = $order_id ? wc_get_order($order_id) : false;
 			if (!$order) {
-				throw new Exception(sprintf('Not found order #%d', $order_id));
+				throw new \Exception(sprintf('Not found order #%d', $order_id));
 			}
-			// order not use payOS, do nothing
+
+			error_log("PAYOS pm check: this.id={$this->id}, order.pm=".$order->get_payment_method());
 			if ($this->id !== $order->get_payment_method()) {
 				return;
 			}
 
-			// return if paid
-			if (str_contains($this->payos_gateway_settings["order_status"]["order_status_after_paid"], $order->get_status())) {
-				$this->use_payment_gateway_template('PAID');
+			$paid_statuses = $this->payos_gateway_settings["order_status"]["order_status_after_paid"] ?? '';
+			if ($paid_statuses && str_contains($paid_statuses, $order->get_status())) {
+				$this->use_payment_gateway_template($order_id, 'PAID', null, $order);
 				return;
 			}
-		} catch (Exception $e) {
-			// if there was an error, log to a file and add an order note
-			$logger->error(
-				sprintf('Error when get order #%d', $order_id),
-				array('source' => 'payos', 'order' => $order_id, 'error' => $e->getMessage())
-			);
-			$this->use_payment_gateway_template('ERROR');
+		} catch (\Throwable $e) {
+			$logger->error(sprintf('Error when get order #%d', $order_id), ['source'=>'payos','order'=>$order_id,'error'=>$e->getMessage()]);
+			$this->use_payment_gateway_template($order_id, 'ERROR');
 			return;
 		}
 
-		// get checkout url
 		try {
 			$checkout_url = $this->get_payos_payment_url($order_id);
-			$this->use_payment_gateway_template('PENDING', $checkout_url, $order);
-		} catch (Exception $e) {
-			$logger->error('Error when create payment link', array('source' => 'payos', 'order' => $order_id, 'error' => $e->getMessage()));
-			$this->use_payment_gateway_template('ERROR');
+			$this->use_payment_gateway_template($order_id, 'PENDING', $checkout_url, $order);
+		} catch (\Throwable $e) {
+			$logger->error('Error when create payment link', ['source'=>'payos','order'=>$order_id,'error'=>$e->getMessage()]);
+			$this->use_payment_gateway_template($order_id, 'ERROR');
 			return;
 		}
 	}
