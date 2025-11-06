@@ -269,4 +269,60 @@ class CheckoutControll{
         }
     }
 
+    public function get_payment_status($order_id, $status)
+    {
+        global $product_type, $product_package;
+
+        if($status == 'PENDING' || $status == 'ERROR'){
+            return ['status' => 'order_not_paid'];
+        }else{
+            // Kiểm tra đầu vào
+            if (empty($order_id) || !is_numeric($order_id)) {
+                error_log('⚠️ get_payment_status: order_id không hợp lệ');
+                return ['status' => 'invalid_order'];
+            }
+
+            $order = wc_get_order($order_id);
+            if (!$order) {
+                error_log("⚠️ get_payment_status: Không tìm thấy order #{$order_id}");
+                return ['status' => 'order_not_found'];
+            }
+
+            // Kiểm tra xem order đã có meta increment chưa
+            $already_incremented = $order->get_meta('_vgtech_ai_views_incremented');
+            if (!empty($already_incremented)) {
+                // Đã xử lý rồi
+                return 2;
+            }
+
+            // Lặp qua từng sản phẩm trong order
+            $items = $order->get_items();
+            foreach ($items as $item) {
+                $product_id = $item->get_product_id();
+                $product = wc_get_product($product_id);
+
+                if (!$product) continue;
+
+                // Kiểm tra loại sản phẩm có khớp với global $product_type không
+                if ($product->get_type() === $product_type) {
+                    // Tăng lượt xem AI cho user
+                    $user_id = $order->get_user_id();
+                    if ($user_id) {
+                        $views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
+                        update_user_meta($user_id, '_vgtech_ai_views', $views + 1);
+
+                        // Gắn flag để không tăng lại lần nữa
+                        $order->update_meta_data('_vgtech_ai_views_incremented', 'yes');
+                        $order->save();
+
+                        error_log("✅ Đã cộng lượt xem cho user {$user_id} từ order #{$order_id}");
+                        return ['status' => 'success', 'user_id' => $user_id, 'views' => $views + 1];
+                    }
+                }
+            }
+        }
+
+        // Nếu không có sản phẩm nào khớp
+        return ['status' => 'no_matching_product'];
+    }
 }

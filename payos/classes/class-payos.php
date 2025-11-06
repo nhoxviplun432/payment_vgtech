@@ -483,6 +483,21 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 
 	public function payos_checkout_shortcode($attributes)
 	{
+
+		// Gọi controller tùy chỉnh
+		$vgtech_payment_data = null;
+		if (class_exists('\paymentvgtech\CheckoutControll')) {
+			try {
+				$checkout_controller = new \paymentvgtech\CheckoutControll();
+				if (method_exists($checkout_controller, 'get_payment_status')) {
+					$vgtech_payment_data = $checkout_controller->get_payment_status($attributes['order_id'], $attributes['status']);
+				}
+			} catch (\Throwable $e) {
+				error_log('❌ VGTech Payment: ' . $e->getMessage());
+			}
+		} else {
+			error_log('⚠️ Class paymentvgtech\CheckoutControll not found.');
+		}
 		// Define your data
 		$payos_data = array(
 			'message' => __('Please wait...', 'payos'),
@@ -491,7 +506,8 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			'redirect_url' => '',
 			'checkout_url' => '',
 			'status' => isset($attributes['status']) ? $attributes['status'] : 'DEFAULT',
-			'refresh_when_paid' => $this->payos_gateway_settings['refresh_upon_successful_payment']
+			'refresh_when_paid' => $this->payos_gateway_settings['refresh_upon_successful_payment'],
+			'vgtech_payment' => $vgtech_payment_data,
 		);
 
 		// Test if there is a specific status and set the redirect url and message accordingly

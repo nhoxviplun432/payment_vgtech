@@ -40,7 +40,7 @@ const showUI = (content, message, icon, isError = false) => {
 	</div>
 </div>`
 }
-  
+console.log(payos_checkout_data.vgtech_payment);
 switch (payos_checkout_data.status) {
   case "PENDING":
     let paymentLinkOrigin = null;

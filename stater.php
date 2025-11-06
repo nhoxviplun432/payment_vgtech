@@ -1,12 +1,25 @@
 <?php
+/**
+ * Plugin Starter for VGTech Payment Plugin
+ * 
+ * @package paymentvgtech
+ */
+
 namespace paymentvgtech;
 
 defined('ABSPATH') || exit;
 
-require_once PAYMENT_AI_CHAT_VGTECH_DIR . 'includes/class.php';
+// === Autoload classes ===
+$autoload_path = PAYMENT_AI_CHAT_VGTECH_DIR . 'vendor/autoload.php';
+if (file_exists($autoload_path)) {
+    require_once $autoload_path;
+} else {
+    // fallback nếu chưa build composer autoload
+    require_once PAYMENT_AI_CHAT_VGTECH_DIR . 'src/includes/class.php';
+}
 
-// === Kiểm tra WooCommerce ===
-include_once(ABSPATH . 'wp-admin/includes/plugin.php');
+// === WooCommerce dependency check ===
+include_once ABSPATH . 'wp-admin/includes/plugin.php';
 if (!is_plugin_active('woocommerce/woocommerce.php')) {
     add_action('admin_notices', function () {
         echo '<div class="notice notice-error"><p><strong>VGTech Payment</strong> yêu cầu cài và kích hoạt WooCommerce để hoạt động.</p></div>';
@@ -22,7 +35,7 @@ add_filter('plugins_url', function ($url, $path, $plugin) {
     return $url;
 }, 10, 3);
 
-// === Nạp PayOS plugin nội bộ ===
+// === Load PayOS plugin nội bộ ===
 $payos_file = PAYMENT_AI_CHAT_VGTECH_DIR . 'payos/payos.php';
 if (file_exists($payos_file)) {
     include_once $payos_file;
@@ -30,30 +43,22 @@ if (file_exists($payos_file)) {
     error_log('⚠️ PayOS module missing: ' . $payos_file);
 }
 
-// === Global variables ===
-global $product_type, $product_package;
-$product_type    = 'package_ai';
-$product_package = 'ai_chat';
-
-// === Autoload Composer hoặc class fallback ===
-if (file_exists(PAYMENT_AI_CHAT_VGTECH_DIR . 'vendor/autoload.php')) {
-    require_once PAYMENT_AI_CHAT_VGTECH_DIR . 'vendor/autoload.php';
-} else {
-    require_once PAYMENT_AI_CHAT_VGTECH_DIR . 'includes/class.php';
-}
-
-// === Khởi tạo plugin ===
+// === Khởi tạo plugin chính ===
 add_action('plugins_loaded', function () {
     if (class_exists('\paymentvgtech\PaymentVgtech')) {
         $plugin = new \paymentvgtech\PaymentVgtech();
-        $plugin->register();
-        $plugin->run();
+        if (method_exists($plugin, 'register')) {
+            $plugin->register();
+        }
+        if (method_exists($plugin, 'run')) {
+            $plugin->run();
+        }
     } else {
-        error_log('⚠️ Class PaymentVgtech không tồn tại.');
+        error_log('⚠️ Class PaymentVgtech không tồn tại. Kiểm tra file includes/class.php hoặc autoload PSR-4.');
     }
 });
 
-// === Hàm tạo bảng database ===
+// === Hàm tạo bảng database khi kích hoạt plugin ===
 function run_starter_setup()
 {
     global $wpdb;
@@ -73,3 +78,6 @@ function run_starter_setup()
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
     dbDelta($sql);
 }
+
+// === Kích hoạt plugin lần đầu sẽ tạo bảng ===
+register_activation_hook(PAYMENT_AI_CHAT_VGTECH_DIR . 'payos.php', __NAMESPACE__ . '\\run_starter_setup');

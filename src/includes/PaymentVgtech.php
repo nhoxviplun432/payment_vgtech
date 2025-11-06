@@ -17,8 +17,8 @@ class PaymentVgtech {
 
     protected function loadRoutes(): void
     {
-        $routePath = trailingslashit(PAYMENT_AI_CHAT_VGTECH_DIR) . 'includes/route.php';
-        if (file_exists($routePath)) {
+        $routePath = trailingslashit(PAYMENT_AI_CHAT_VGTECH_DIR) . 'src/includes/route.php';
+        if (file_exists($routePath)) {  
             $routes = require $routePath;
             $this->controllers = $routes['controllers'] ?? [];
             $this->hooks = $routes['hooks'] ?? [];

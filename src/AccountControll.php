@@ -229,7 +229,7 @@ class AccountControll{
     public function account_tuvan_endpoint(){
         $user_id = get_current_user_id();
         global $wpdb;
-        $table = $wpdb->prefix . 'tracuu';
+        $table = $wpdb->prefix . 'vgtech_payment_ai';
 
         $results = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table WHERE user_id = %d ORDER BY date DESC",

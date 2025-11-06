@@ -1,8 +1,11 @@
 {
-    "name": "payment_vgtech/payment",
+    "name": "paymentvgtech/payment",
     "autoload": {
         "psr-4": {
-            "payment_vgtech\\": "src/"
+            "paymentvgtech\\": [
+                "src/",
+                "src/includes/"
+            ]
         }
     },
     "require": {}
