@@ -62,8 +62,9 @@ return [
         ['action', 'woocommerce_account_tuvan_endpoint', [AccountControll::class, 'account_tuvan_endpoint']],
 
         // PaymentControll
-        // ['action', 'woocommerce_payment_complete_payos', [PaymentControll::class, 'vgtech_update_ai_views_after_payment']],
-        ['action', 'wp_head', [PaymentControll::class, 'inject_checkout_css']]
+        ['action', 'wp_head', [PaymentControll::class, 'inject_checkout_css']],
+        ['action', 'wp_ajax_vgtech_get_payment_status', [PaymentControll::class, 'vgtech_get_payment_status']],
+        ['action', 'wp_ajax_nopriv_vgtech_get_payment_status', [PaymentControll::class, 'vgtech_get_payment_status']],
         // AJAX endpoints
         // ['action', 'wp_ajax_handle_get_full_pdf_api', [PaymentControll::class, 'handle_get_full_pdf_api']],
         // ['action', 'wp_ajax_nopriv_handle_get_full_pdf_api', [PaymentControll::class, 'handle_get_full_pdf_api']],

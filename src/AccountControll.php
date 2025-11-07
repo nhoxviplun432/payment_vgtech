@@ -249,27 +249,27 @@ class AccountControll{
         }
 
         // Hiển thị bảng
-        echo '<table style="width:100%; border-collapse:collapse; border:1px solid #ccc;">';
+        echo '<table style="width:100%; border-collapse:collapse;">';
         echo '<thead>
-                <tr style="background-color:#f5f5f5;">
+                <tr style="background-color:var(--e-global-color-primary);">
                     <th style="padding:10px; text-align:left;">#</th>
                     <th style="padding:10px; text-align:left;">Mã đơn hàng</th>
                     <th style="padding:10px; text-align:left;">Số lượt cộng</th>
-                    <th style="padding:10px; text-align:left;">Ngày tạo</th>
-                    <th style="padding:10px; text-align:center;">Hành động</th>
+                    <th style="padding:10px; text-align:left;">Ngày thanh toán</th>
+                    <th style="padding:10px; text-align:center;"></th>
                 </tr>
             </thead>';
         echo '<tbody>';
 
         $index = 1;
         foreach ($results as $row) {
-            $bg_color = $index % 2 === 0 ? '#fafafa' : '#ffffff';
+            $bg_color = $index % 2 === 0 ? '#000000ff' : 'tranparent';
             $order_id = intval($row->order_id);
 
             echo '<tr style="background-color:' . $bg_color . ';">';
             echo '<td style="padding:10px;">' . $index . '</td>';
             echo '<td style="padding:10px;">#' . esc_html($order_id) . '</td>';
-            echo '<td style="padding:10px;">' . esc_html($row->value) . '</td>';
+            echo '<td style="padding:10px;">+ ' . esc_html($row->value) . '</td>';
             echo '<td style="padding:10px;">' . date('d/m/Y H:i', strtotime($row->created_at)) . '</td>';
             echo '<td style="padding:10px; text-align:center;">';
 

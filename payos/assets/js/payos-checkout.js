@@ -79,6 +79,37 @@ switch (payos_checkout_data.status) {
     break;
   case "PAID":
     showUI(content, payos_checkout_data.message, payos_checkout_data.icon);
+
+    const url_order = window.location.href;
+    const orderId = url_order.split('order-received/')[1]?.split('/')[0];
+
+    if (orderId) {
+      jQuery.ajax({
+        url: ajax_object.ajax_url,
+        type: 'POST',
+        dataType: 'json',
+        data: {
+          action: 'vgtech_get_payment_status',
+          nonce: ajax_object.nonce, // ✅ gửi nonce
+          order_id: orderId,
+          status: 'PAID'
+        },
+        success: function (response) {
+          console.log('✅ AJAX Payment Status:', response);
+          if (response.status === 'success') {
+            console.log(`🎯 +${response.total_added} lượt xem từ order #${response.order_id}`);
+          } else {
+            console.warn('⚠️', response.status);
+          }
+        },
+        error: function (xhr, status, error) {
+          console.error('❌ AJAX Error:', error);
+        },
+      });
+    } else {
+      console.warn('⚠️ Không tìm thấy order_id trong URL.');
+    }
+
     break;
   case "ERROR":
     showUI(content, payos_checkout_data.message, payos_checkout_data.icon, true);

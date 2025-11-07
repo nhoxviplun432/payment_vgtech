@@ -4,13 +4,7 @@ namespace paymentvgtech;
 defined('ABSPATH') || exit;
 
 class CheckoutControll{
-    private $payos_settings;
-
-    public function __construct() {
-        $this->payos_settings = get_option('payos_gateway_settings', []);
-    }
-
-
+    
     public function save_order_meta($order, $data)
     {
         if (WC()->session->get('tracuu_order_data')) {
@@ -22,53 +16,6 @@ class CheckoutControll{
             return false;
         }
     }
-
-    // public function custom_checkout_fields($fields)
-    // {
-    //     global $product_type;
-    //     $cart = WC()->cart->get_cart();
-    //     $has_tracuu = false;
-
-    //     foreach ($cart as $item) {
-    //         $type = get_post_meta($item['data']->get_id(), '_product_type', true);
-    //         if ($type === $product_type) {
-    //             $has_tracuu = true;
-    //             break;
-    //         }
-    //     }
-
-    //     if ($has_tracuu) {
-    //         unset(
-    //             $fields['billing']['billing_country'],
-    //             $fields['billing']['billing_address_1'],
-    //             $fields['billing']['billing_address_2'],
-    //             $fields['billing']['billing_city'],
-    //             $fields['billing']['billing_company'],
-    //             $fields['billing']['billing_postcode'],
-    //             $fields['billing']['billing_state'],
-    //             $fields['shipping'],
-    //             $fields['order']['order_comments'],
-    //             $fields['account'],
-    //             $fields['billing']['billing_first_name'],
-    //             $fields['billing']['billing_last_name']
-    //         );
-
-    //         $fields['billing']['billing_full_name'] = [
-    //             'type' => 'text',
-    //             'label' => 'Họ và tên',
-    //             'required' => true,
-    //             'class' => ['form-row-wide'],
-    //             'priority' => 10,
-    //         ];
-
-    //         if ($data = WC()->session->get('tracuu_order_data')) {
-    //             $fields['billing']['billing_email']['default'] = $data['email'] ?? '';
-    //             $fields['billing']['billing_full_name']['default'] = $data['full_name'] ?? '';
-    //         }
-    //     }
-
-    //     return $fields;
-    // }
 
     public function custom_checkout_fields($fields)
     {
@@ -268,99 +215,6 @@ class CheckoutControll{
             $order->save();
         }
     }
-
-    public function get_payment_status($order_id, $status)
-    {
-        global $wpdb, $product_type, $product_package;
-
-        $table_name = $wpdb->prefix . 'vgtech_payment_ai';
-
-        // 1️⃣ Nếu chưa thanh toán thì bỏ qua
-        if ($status === 'PENDING' || $status === 'ERROR') {
-            return ['status' => 'order_not_paid'];
-        }
-
-        // 2️⃣ Kiểm tra đầu vào
-        if (empty($order_id) || !is_numeric($order_id)) {
-            error_log('⚠️ get_payment_status: order_id không hợp lệ ' . $order_id);
-            return ['status' => 'invalid_order'];
-        }
-
-        $order = wc_get_order($order_id);
-        if (!$order) {
-            error_log("⚠️ get_payment_status: Không tìm thấy order #{$order_id}");
-            return ['status' => 'order_not_found'];
-        }
-
-        // 3️⃣ Kiểm tra flag không cộng trùng
-        if (!empty($order->get_meta('_vgtech_ai_views_incremented'))) {
-            return ['status' => 'already_incremented'];
-        }
-
-        // 4️⃣ Lặp qua từng sản phẩm trong order
-        $total_added = 0;
-        $items = $order->get_items();
-
-        foreach ($items as $item) {
-            $product_id = $item->get_product_id();
-            if (!$product_id) continue;
-
-            // Lấy loại sản phẩm
-            $current_type = get_post_meta($product_id, '_product_type', true);
-            if (empty($current_type)) {
-                $product_obj = wc_get_product($product_id);
-                $current_type = $product_obj ? $product_obj->get_type() : '';
-            }
-
-            // Kiểm tra loại sản phẩm
-            if ($current_type === $product_type) {
-                $user_id = $order->get_user_id();
-                if (!$user_id) continue;
-
-                // Lấy số lượt cộng từ meta package
-                $package_meta_key = '_' . $product_package;
-                $add_views = (int) get_post_meta($product_id, $package_meta_key, true);
-                if ($add_views <= 0) $add_views = 1; // fallback mặc định
-
-                // Cộng vào usermeta
-                $current_views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
-                $new_views = $current_views + $add_views;
-                update_user_meta($user_id, '_vgtech_ai_views', $new_views);
-
-                // Ghi log vào database
-                $wpdb->insert(
-                    $table_name,
-                    [
-                        'user_id'  => $user_id,
-                        'order_id' => $order_id,
-                        'value'    => $add_views,
-                        'created_at' => current_time('mysql'),
-                    ],
-                    ['%d', '%d', '%d', '%s']
-                );
-
-                $total_added += $add_views;
-                error_log("✅ Cộng {$add_views} lượt xem cho user {$user_id} từ sản phẩm #{$product_id} (order #{$order_id})");
-            }
-        }
-
-        // 5️⃣ Cập nhật flag nếu có cộng
-        if ($total_added > 0) {
-            $order->update_meta_data('_vgtech_ai_views_incremented', 'yes');
-            $order->save();
-
-            error_log("🎯 Tổng cộng +{$total_added} lượt xem từ order #{$order_id}");
-            return [
-                'status' => 'success',
-                'total_added' => $total_added,
-                'order_id' => $order_id
-            ];
-        }
-
-        // 6️⃣ Không có sản phẩm khớp
-        return ['status' => 'no_matching_product'];
-    }
-
 
 
 }
