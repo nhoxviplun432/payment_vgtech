@@ -263,7 +263,7 @@ class AccountControll{
 
         $index = 1;
         foreach ($results as $row) {
-            $bg_color = $index % 2 === 0 ? '#000000ff' : 'tranparent';
+            $bg_color = $index % 2 === 0 ? '#00000038' : 'tranparent';
             $order_id = intval($row->order_id);
 
             echo '<tr style="background-color:' . $bg_color . ';">';    
