@@ -266,7 +266,7 @@ class AccountControll{
             $bg_color = $index % 2 === 0 ? '#000000ff' : 'tranparent';
             $order_id = intval($row->order_id);
 
-            echo '<tr style="background-color:' . $bg_color . ';">';
+            echo '<tr style="background-color:' . $bg_color . ';">';    
             echo '<td style="padding:10px;">' . $index . '</td>';
             echo '<td style="padding:10px;">#' . esc_html($order_id) . '</td>';
             echo '<td style="padding:10px;">+ ' . esc_html($row->value) . '</td>';
@@ -274,13 +274,17 @@ class AccountControll{
             echo '<td style="padding:10px; text-align:center;">';
 
             // Nếu có order → liên kết xem đơn hàng WooCommerce
-            if ($order_id) {
+            if ($order_id > 0) {
+                // 🔹 Link đến chi tiết đơn hàng WooCommerce
                 $order_url = wc_get_account_endpoint_url('view-order/' . $order_id);
-                echo '<a href="' . esc_url($order_url) . '" title="Xem đơn hàng"><i class="fas fa-eye"></i></a> ';
+                echo '<a href="' . esc_url($order_url) . '" title="Xem đơn hàng"><i class="fas fa-shopping-cart"></i></a>';
+            } else {
+                // 🔸 Link đến chi tiết cộng thủ công (custom endpoint)
+                echo 'Gift';
             }
 
             echo '</td>';
-            echo '</tr>';
+            echo '</tr>';   
 
             $index++;
         }
@@ -314,7 +318,7 @@ class AccountControll{
             echo '<tr style="background-color:' . esc_attr($bg) . '">';
             echo '<td style="padding:10px;width:5%;">' . $index . '</td>';
             echo '<td style="padding:10px;width:35%;">' . esc_html($row->title) . '</td>';
-            echo '<td style="padding:10px;width:20%;">' . date('d/m/Y H:i', strtotime($row->date)) . '</td>';
+            echo '<td style="padding:10px;width:20%;">' . date('d/m/Y', strtotime($row->date)) . '</td>';
             echo '<td style="padding:10px;width:20%;">' . esc_html($type_text) . '</td>';
             echo '<td class="action table-tracuu-action" style="padding:10px;width:20%;">';
 
@@ -409,4 +413,87 @@ class AccountControll{
     }
 
 
+    // Consult View AI 
+    public static function add_consult_view_column($columns) {
+        $columns['consult_view'] = __('Consult View', 'vgtech');
+        return $columns;
+    }
+
+    public function show_consult_view_column($value, $column_name, $user_id) {
+        if ($column_name === 'consult_view') {
+            $views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
+            return '<strong>' . $views . '</strong>';
+        }
+        return $value;
+    }
+
+    public function sortable_consult_view_column($columns) {
+        $columns['consult_view'] = 'consult_view';
+        return $columns;
+    }
+
+    public function sort_consult_view_query($query) {
+        if (isset($query->query_vars['orderby']) && $query->query_vars['orderby'] === 'consult_view') {
+            $query->query_vars['meta_key'] = '_vgtech_ai_views';
+            $query->query_vars['orderby'] = 'meta_value_num';
+        }
+    }
+
+
+    public function add_consult_view_field($user)
+    {
+        $views = (int) get_user_meta($user->ID, '_vgtech_ai_views', true);
+        ?>
+        <h2><?php esc_html_e('Consult View AI', 'vgtech'); ?></h2>
+        <table class="form-table">
+            <tr>
+                <th><label for="vgtech_ai_views"><?php esc_html_e('Consult View Count', 'vgtech'); ?></label></th>
+                <td>
+                    <input type="number" name="vgtech_ai_views" id="vgtech_ai_views"
+                        value="<?php echo esc_attr($views); ?>" class="regular-text" min="0" />
+                    <p class="description">
+                        <?php esc_html_e('Number of consult views for this user. Updating will also log to history table.', 'vgtech'); ?>
+                    </p>
+                </td>
+            </tr>
+        </table>
+        <?php
+    }
+
+
+    public function save_consult_view_field($user_id)
+    {
+        if (!current_user_can('edit_user', $user_id)) {
+            return false;
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'vgtech_payment_ai';
+
+        // Lấy giá trị mới
+        $new_views = isset($_POST['vgtech_ai_views']) ? (int) $_POST['vgtech_ai_views'] : 0;
+
+        // Lấy giá trị cũ
+        $old_views = (int) get_user_meta($user_id, '_vgtech_ai_views', true);
+
+        // Tính số lượng thêm vào
+        $add_views = $new_views - $old_views;
+
+        // Cập nhật usermeta
+        update_user_meta($user_id, '_vgtech_ai_views', $new_views);
+
+        // Nếu có tăng thêm -> ghi log
+        if ($add_views > 0) {
+            $wpdb->insert(
+                $table_name,
+                [
+                    'user_id'    => $user_id,
+                    'order_id'   => 0,
+                    'value'      => $add_views,
+                    'created_at' => current_time('mysql'),
+                ],
+                ['%d', '%d', '%d', '%s']
+            );
+        }
+    }
 }

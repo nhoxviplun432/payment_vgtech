@@ -160,7 +160,7 @@ class CheckoutControll{
             if ($type === $product_type) $has_tracuu = true;
         }
 
-        wp_enqueue_style('checkout-css', PAYMENT_AI_CHAT_VGTECH_URL . 'assets/checkout.css');
+        wp_enqueue_style('checkout-css', PAYMENT_AI_CHAT_VGTECH_URL . 'assets/checkout.css', array(), filemtime(AI_CHATBOX_VGTECH_DIR . 'public/css/ai_chat.css'), 'all');
 
         if ($has_tracuu) {
             wp_enqueue_script('full-pdf-script', PAYMENT_AI_CHAT_VGTECH_URL . 'assets/full_pdf.js', ['jquery'], null, true);

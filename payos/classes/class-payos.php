@@ -503,8 +503,8 @@ class WC_payOS_Payment_Gateway extends WC_Payment_Gateway
 			if ($order) {
 				$payos_data['redirect_url'] = $order->get_checkout_order_received_url();
 				$payos_data['checkout_url'] = isset($attributes['checkout_url']) ? $attributes['checkout_url'] : '';
-				$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/success.png';
-				$payos_data['message'] = __('Đơn hàng này đã được thanh toán thành công.', 'payos');
+				$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/loading.gif';
+				$payos_data['message'] = __('Đang kiểm tra thanh toán. Vui lòng không thoát trang...', 'payos');
 			}
 		} elseif ($status === 'PAID') {
 			$payos_data['icon'] = PAYOS_GATEWAY_URL . '/assets/img/success.png';

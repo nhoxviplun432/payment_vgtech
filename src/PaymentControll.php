@@ -44,7 +44,11 @@ class PaymentControll{
         }
 
         if ($order->get_meta('_vgtech_ai_views_incremented') === 'yes') {
-            wp_send_json(['status' => 'already_incremented']);
+            wp_send_json([
+                'status' => 'already_incremented',
+                'message' => 'success',
+                'button' => home_url()
+            ]);
         }
 
         $total_added = 0;
@@ -92,10 +96,14 @@ class PaymentControll{
                 'status'      => 'success',
                 'total_added' => $total_added,
                 'order_id'    => $order_id,
+                'button' => home_url()
             ]);
         }
 
-        wp_send_json(['status' => 'no_matching_product']);
+        wp_send_json([
+            'status' => 'no_matching_product',
+            'message' => 'success'
+        ]);
     }
 
 }

@@ -18,13 +18,9 @@
 .woocommerce-order-overview,
 .woocommerce-thankyou-order-details,
 .woocommerce-order-details,
-.woocommerce-customer-details {
+.woocommerce-customer-details,
+.woocommerce-thankyou-order-received {
     display: none !important;
-}
-
-.woocommerce-notice--success.woocommerce-thankyou-order-received {
-    text-align: center;
-    margin-top: 20px; 
 }
 
 .woocommerce-form-login-toggle,

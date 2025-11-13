@@ -61,6 +61,19 @@ return [
         ['action', 'woocommerce_account_tracuu-view_endpoint', [AccountControll::class, 'render_tracuu_detail']],
         ['action', 'woocommerce_account_tuvan_endpoint', [AccountControll::class, 'account_tuvan_endpoint']],
 
+            // Consult View account in admin
+            ['filter', 'manage_users_columns', [AccountControll::class, 'add_consult_view_column']],
+            ['filter', 'manage_users_custom_column', [AccountControll::class, 'show_consult_view_column'], 10, 3],
+            ['filter', 'manage_users_sortable_columns', [AccountControll::class, 'sortable_consult_view_column']],
+            ['action', 'pre_get_users', [AccountControll::class, 'sort_consult_view_query']],
+             // Hiển thị field trên trang edit user
+            ['action', 'show_user_profile', [AccountControll::class, 'add_consult_view_field']],
+            ['action', 'edit_user_profile', [AccountControll::class, 'add_consult_view_field']],
+
+            // Lưu field khi update user
+            ['action', 'personal_options_update', [AccountControll::class, 'save_consult_view_field']],
+            ['action', 'edit_user_profile_update', [AccountControll::class, 'save_consult_view_field']],
+
         // PaymentControll
         ['action', 'wp_head', [PaymentControll::class, 'inject_checkout_css']],
         ['action', 'wp_ajax_vgtech_get_payment_status', [PaymentControll::class, 'vgtech_get_payment_status']],
