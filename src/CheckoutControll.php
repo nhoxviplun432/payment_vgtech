@@ -135,11 +135,11 @@ class CheckoutControll{
                     echo '<div class="product-info">';
                         echo '<h3 class="product-title text-center">' . esc_html($title) . '</h3>';
                          // Ảnh sản phẩm
-                        if ($thumbnail) {
-                            echo '<div class="product-image">';
-                            echo '<img src="' . esc_url($thumbnail) . '" alt="' . esc_attr($title) . '" />';
-                            echo '</div>';
-                        }
+                        // if ($thumbnail) {
+                        //     echo '<div class="product-image">';
+                        //     echo '<img src="' . esc_url($thumbnail) . '" alt="' . esc_attr($title) . '" />';
+                        //     echo '</div>';
+                        // }
                         echo '<div class="product-content">' . wp_kses_post($content) . '</div>';
                         echo '<p class="product-price text-center"><strong>Giá:</strong> ' . wp_kses_post($price_html) . '</p>';
                     echo '</div>';

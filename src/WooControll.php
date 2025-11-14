@@ -162,7 +162,7 @@ class WooControll {
                 </a> -->
 
                 <h3 class="text-center title-package"><?php the_title(); ?></h3>
-
+                <img style="border-radius: 5px; margin: 30px 0px" src="<?php echo esc_url($thumbnail_url); ?>"  alt="' . esc_attr($title) . '">
                 <!-- ✅ Thêm nội dung sản phẩm ở đây -->
                 <div class="package-desc">
                     <?php the_excerpt(); ?>
@@ -170,7 +170,7 @@ class WooControll {
                 </div>
 
                 <p class="text-center"><?php echo $product->get_price_html(); ?></p>
-                <!-- <p><strong><?php echo __('Lượt:', 'woocommerce'); ?></strong> <?php echo esc_html($ai_chat); ?></p> -->
+                <p class="text-center"><strong><?php echo __('Lượt:', 'woocommerce'); ?></strong> <?php echo esc_html($ai_chat); ?></p>
 
                 <a href="<?php echo esc_url($product->add_to_cart_url()); ?>" class="button add_to_cart_button">
                     <?php echo __('Nâng Cấp', 'woocommerce'); ?>
